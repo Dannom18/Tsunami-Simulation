@@ -40,26 +40,18 @@ h_results = [h_initial.copy()]
 u_results = [u_initial.copy()]
 
 for t_idx in range(len(t_eval) - 1):
-    
+
     t_span = [t_eval[t_idx], t_eval[t_idx + 1]]
     h_new = np.zeros_like(h)
     u_new = np.zeros_like(u)
 
-    for i in range(1, N_x - 1):  # Loop over spatial grid (excluding boundaries)
+    for i in range(1, N_x - 1):
         # Neighbors for finite differences
         h_neighbors = [h[i - 1], h[i + 1]]
         u_neighbors = [u[i - 1], u[i + 1]]
 
         # Solve ODE for this spatial point
-        sol = solve_ivp(
-            pde_system,
-            t_span,
-            [h[i], u[i]],
-            args=(dx, h_neighbors, u_neighbors),
-            method="RK45",
-            rtol=1e-5,
-            atol=1e-8,
-        )
+        sol = solve_ivp(pde_system, t_span, [h[i], u[i]], args=(dx, h_neighbors, u_neighbors), method="RK45", rtol=1e-5, atol=1e-8)
         
         # Update h and u at this point
         h_new[i], u_new[i] = sol.y[:, -1]
@@ -81,45 +73,24 @@ h_results = np.array(h_results)
 u_results = np.array(u_results)
 
 # Create a meshgrid for the 3D plot
-
 X, T = np.meshgrid(x, t_eval)
 
-
-
 # Plot height (h) as a 3D surface
-
 fig = plt.figure(figsize=(14, 8))
-
 ax = fig.add_subplot(111, projection='3d')
-
 ax.plot_surface(X, T, h_results, cmap='viridis', edgecolor='none')
-
 ax.set_xlabel('x (Spatial Grid)')
-
 ax.set_ylabel('t (Time)')
-
 ax.set_zlabel('h (Height)')
-
 ax.set_title('Height Profile Over Time')
-
 plt.show()
 
-
-
 # Plot velocity (u) as a 3D surface
-
 fig = plt.figure(figsize=(14, 8))
-
 ax = fig.add_subplot(111, projection='3d')
-
 ax.plot_surface(X, T, u_results, cmap='plasma', edgecolor='none')
-
 ax.set_xlabel('x (Spatial Grid)')
-
 ax.set_ylabel('t (Time)')
-
 ax.set_zlabel('u (Velocity)')
-
 ax.set_title('Velocity Profile Over Time')
-
 plt.show()
