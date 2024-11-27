@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-import model as md
 
 # Domain and parameters
 L = 100e3  # Extended domain length in meters
@@ -18,6 +17,29 @@ x0 = L / 2  # Disturbance center
 h_initial = h0 * np.exp(-((x[1:-1] - x0) ** 2) / (2 * sigma ** 2))
 u_initial = np.zeros(N_x)  # No initial velocity
 
+def pde_system(t, y):
+    h = y[:N_x]
+    u = y[N_x:]
+
+    # Compute spatial derivatives
+    dh_dx = np.zeros(N_x)
+    du_dx = np.zeros(N_x)
+
+    # Interior points (central differences)
+    dh_dx[1:-1] = (h[2:] - h[:-2]) / (2 * dx)
+    du_dx[1:-1] = (u[2:] - u[:-2]) / (2 * dx)
+
+    # Boundary points (one-sided differences)
+    dh_dx[0] = (h[1] - h[0]) / dx
+    du_dx[0] = (u[1] - u[0]) / dx
+    dh_dx[-1] = (h[-1] - h[-2]) / dx
+    du_dx[-1] = (u[-1] - u[-2]) / dx
+
+    # Time derivatives
+    dh_dt = -h * du_dx - u * dh_dx
+    du_dt = -u * du_dx - g * dh_dx
+
+    return np.concatenate((dh_dt, du_dt))
 
 # Initial conditions
 y0 = np.concatenate((h_initial, u_initial))
@@ -31,7 +53,7 @@ t_eval = np.linspace(0, Total_time, num_time_points)
 
 # Solve the system
 sol = solve_ivp(
-    md.pde_system,
+    pde_system,
     t_span=(0, Total_time),
     y0=y0,
     method="BDF",
