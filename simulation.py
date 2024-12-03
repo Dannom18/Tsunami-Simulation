@@ -1,96 +1,109 @@
 import numpy as np
-from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 # Parameters
-L = 10.0
-T = 2.0
+L = 100 * 10**3.0
+Total_time = 2000.0
 g = 9.81
-N_x = 10
-N_t = 200
-dx = L / (N_x - 1)
-x = np.linspace(0, L, N_x)
+viscosity = 10.0
+N_x = 2000
+dx = L / (N_x + 2)
+x = np.linspace(0, L, N_x + 2)
+h0 = 4000
 
-# Initial conditions
-h_initial = np.ones(N_x)
-u_initial = np.zeros(N_x)
+exp0 = 1.0  # Wave amplitude in meters
+wave_width = 10000.0  # Wave width in meters
+x_center = L/2 # Center of the wave
+exp = exp0 * np.exp(-((x - x_center)**2) / (2 * wave_width**2))
 
-# Add a perturbation as for the moment initial conditions are regular
-h_initial[N_x // 2] += 1.0
+h_initial = h0 + exp
+u_initial = np.zeros_like(x)
 
-# Initialize arrays for h and u
-h = h_initial.copy()
-u = u_initial.copy()
+delta_t = 0.25
 
-# Define the ODE system at each spatial point
-def pde_system(t, y, dx, h_neighbors, u_neighbors):
+def pde_system_viscosity(t, y):
+    h = y[:N_x + 2]
+    u = y[N_x + 2:]
 
-    h, u = y
+    dh_dx = np.zeros(N_x + 2, dtype=np.float64)
+    du_dx = np.zeros(N_x + 2, dtype=np.float64)
+    dh_dt = np.zeros(N_x + 2, dtype=np.float64)
+    du_dt = np.zeros(N_x + 2, dtype=np.float64)
 
-    dh_dx = (h_neighbors[1] - h_neighbors[0]) / dx
-    du_dx = (u_neighbors[1] - u_neighbors[0]) / dx
+    dh_dx[1:-1] = (h[2:] - h[:-2]) / (2 * dx)
+    du_dx[1:-1] = (u[2:] - u[:-2]) / (2 * dx)
+
+    dh_dt[1:-1] = -h[1:-1] * du_dx[1:-1] - u[1:-1] * dh_dx[1:-1]
+    du_dt[1:-1] = -u[1:-1] * du_dx[1:-1] - g * dh_dx[1:-1] + viscosity * (u[2:] - 2 * u[1:-1] + u[:-2]) / (dx**2)
+
+    # Apply boundary conditions
+    u[0] = u[1]
+    h[0] = h[1]
+
+    u[-1] = u[-2]
+    h[-1] = h[-2]
+
+    return np.concatenate((dh_dt, du_dt))
+
+def rungeKutta(y0: np.ndarray, tspan: tuple, delta_t: float, ode: callable):
+    t0, tend = tspan
+    t = [t0]
+    y = [y0]
+
+    # Determine the number of time steps
+    num_steps = int((tend - t0) / delta_t)
     
-    dh_dt = -h * du_dx - u * dh_dx
-    du_dt = -u * du_dx - g * dh_dx
-    return [dh_dt, du_dt]
+    # For animation, store data at each frame
+    h_data = []
+    u_data = []
 
-# Time-stepping
-t_eval = np.linspace(0, T, N_t)
-h_results = [h_initial.copy()]
-u_results = [u_initial.copy()]
+    for step in range(num_steps):
+        k1 = delta_t * ode(t0, y[-1])
+        k2 = delta_t * ode(t0 + 0.5 * delta_t, y[-1] + 0.5 * k1)
+        k3 = delta_t * ode(t0 + 0.5 * delta_t, y[-1] + 0.5 * k2)
+        k4 = delta_t * ode(t0 + delta_t, y[-1] + k3)
 
-for t_idx in range(len(t_eval) - 1):
+        y_next = y[-1] + (1.0 / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        t0 += delta_t
+        t.append(t0)
+        y.append(y_next)
 
-    t_span = [t_eval[t_idx], t_eval[t_idx + 1]]
-    h_new = np.zeros_like(h)
-    u_new = np.zeros_like(u)
+        # Store data for animation every few steps to reduce data size
+        if step % 40 == 0:
+            h_current = y_next[:N_x + 2]
+            u_current = y_next[N_x + 2:]
+            h_data.append(h_current - h0)
+            u_data.append(u_current)
 
-    for i in range(1, N_x - 1):
-        # Neighbors for finite differences
-        h_neighbors = [h[i - 1], h[i + 1]]
-        u_neighbors = [u[i - 1], u[i + 1]]
+    return t, y, h_data, u_data
 
-        # Solve ODE for this spatial point
-        sol = solve_ivp(pde_system, t_span, [h[i], u[i]], args=(dx, h_neighbors, u_neighbors), method="RK45", rtol=1e-5, atol=1e-8)
-        
-        # Update h and u at this point
-        h_new[i], u_new[i] = sol.y[:, -1]
+t0 = 0.0
+tf = Total_time
+y0 = np.concatenate((h_initial, u_initial))
 
-    # Apply boundary conditions (e.g., periodic)
-    h_new[0], u_new[0] = h_new[-2], u_new[-2]
-    h_new[-1], u_new[-1] = h_new[1], u_new[1]
+t, y, h_data, u_data = rungeKutta(y0, (t0, tf), delta_t, pde_system_viscosity)
+h_data = np.array(h_data)
 
-    # Store results
-    h_results.append(h_new)
-    u_results.append(u_new)
+fig, ax = plt.subplots(figsize=(12, 6))
+line, = ax.plot([], [], lw=2)
+ax.set_xlim(0, L)
+ax.set_ylim(-1.5, 1.5)
+ax.set_xlabel('Distance (m)')
+ax.set_ylabel('Surface Elevation (m)')
+ax.set_title('Tsunami Wave Propagation')
 
-    # Update h and u for the next time step
-    h = h_new.copy()
-    u = u_new.copy()
+def init():
+    line.set_data([], [])
+    return line,
 
-# Convert results to arrays
-h_results = np.array(h_results)
-u_results = np.array(u_results)
+def animate(i):
+    x_data = x
+    y_data = h_data[i]
+    line.set_data(x_data, y_data)
+    ax.set_title(f'Tsunami Wave at Time = {i * delta_t * 40:.1f} s')
+    return line,
 
-# Create a meshgrid for the 3D plot
-X, T = np.meshgrid(x, t_eval)
-
-# Plot height (h) as a 3D surface
-fig = plt.figure(figsize=(14, 8))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot_surface(X, T, h_results, cmap='viridis', edgecolor='none')
-ax.set_xlabel('x (Spatial Grid)')
-ax.set_ylabel('t (Time)')
-ax.set_zlabel('h (Height)')
-ax.set_title('Height Profile Over Time')
-plt.show()
-
-# Plot velocity (u) as a 3D surface
-fig = plt.figure(figsize=(14, 8))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot_surface(X, T, u_results, cmap='plasma', edgecolor='none')
-ax.set_xlabel('x (Spatial Grid)')
-ax.set_ylabel('t (Time)')
-ax.set_zlabel('u (Velocity)')
-ax.set_title('Velocity Profile Over Time')
+num_frames = h_data.shape[0]
+ani = animation.FuncAnimation(fig, animate, frames=num_frames, init_func=init, blit=True, interval=50)
 plt.show()
