@@ -3,107 +3,129 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 # Parameters
-L = 100 * 10**3.0
-Total_time = 2000.0
+Lx, Ly = 100 * 10**3, 100 * 10**3
+Total_time = 10000.0
 g = 9.81
 viscosity = 10.0
-N_x = 2000
-dx = L / (N_x + 2)
-x = np.linspace(0, L, N_x + 2)
+Nx, Ny = 100, 100
+dx, dy = Lx / (Nx + 2), Ly / (Ny + 2)
+x_coord = np.linspace(0, Lx, Nx + 2)
+y_coord = np.linspace(0, Ly, Ny + 2)
 h0 = 4000
+delta_t = 0.25
 
-exp0 = 1.0  # Wave amplitude in meters
-wave_width = 10000.0  # Wave width in meters
-x_center = L/2 # Center of the wave
-exp = exp0 * np.exp(-((x - x_center)**2) / (2 * wave_width**2))
+# Initial Conditions
+exp0 = 1.0
+wave_width = 10000.0
+x_center, y_center = Lx / 2, Ly / 2
+exp = exp0 * np.exp(-((x_coord[:, None] - x_center)**2 + (y_coord[None, :] - y_center)**2) / (2 * wave_width**2))
 
 h_initial = h0 + exp
-u_initial = np.zeros_like(x)
+u_initial = np.zeros((Nx + 2, Ny + 2))
+v_initial = np.zeros((Nx + 2, Ny + 2))
 
 delta_t = 0.25
 
-def pde_system_viscosity(t, y):
-    h = y[:N_x + 2]
-    u = y[N_x + 2:]
+def pde_system_2D(t, y):
+    h = y[: (Nx + 2) * (Ny + 2)].reshape((Nx + 2, Ny + 2))
+    u = y[(Nx + 2) * (Ny + 2) : 2 * (Nx + 2) * (Ny + 2)].reshape((Nx + 2, Ny + 2))
+    v = y[2 * (Nx + 2) * (Ny + 2) :].reshape((Nx + 2, Ny + 2))
 
-    dh_dx = np.zeros(N_x + 2, dtype=np.float64)
-    du_dx = np.zeros(N_x + 2, dtype=np.float64)
-    dh_dt = np.zeros(N_x + 2, dtype=np.float64)
-    du_dt = np.zeros(N_x + 2, dtype=np.float64)
+    # Compute derivatives
+    dh_dx = np.zeros_like(h)
+    dh_dy = np.zeros_like(h)
+    du_dx = np.zeros_like(u)
+    du_dy = np.zeros_like(u)
+    dv_dx = np.zeros_like(v)
+    dv_dy = np.zeros_like(v)
 
-    dh_dx[1:-1] = (h[2:] - h[:-2]) / (2 * dx)
-    du_dx[1:-1] = (u[2:] - u[:-2]) / (2 * dx)
+    # Finite differences for interior points
+    dh_dx[1:-1, 1:-1] = (h[2:, 1:-1] - h[:-2, 1:-1]) / (2 * dx)
+    dh_dy[1:-1, 1:-1] = (h[1:-1, 2:] - h[1:-1, :-2]) / (2 * dy)
+    du_dx[1:-1, 1:-1] = (u[2:, 1:-1] - u[:-2, 1:-1]) / (2 * dx)
+    du_dy[1:-1, 1:-1] = (u[1:-1, 2:] - u[1:-1, :-2]) / (2 * dy)
+    dv_dx[1:-1, 1:-1] = (v[2:, 1:-1] - v[:-2, 1:-1]) / (2 * dx)
+    dv_dy[1:-1, 1:-1] = (v[1:-1, 2:] - v[1:-1, :-2]) / (2 * dy)
 
-    dh_dt[1:-1] = -h[1:-1] * du_dx[1:-1] - u[1:-1] * dh_dx[1:-1]
-    du_dt[1:-1] = -u[1:-1] * du_dx[1:-1] - g * dh_dx[1:-1] + viscosity * (u[2:] - 2 * u[1:-1] + u[:-2]) / (dx**2)
+    dh_dt = np.zeros_like(h)
+    du_dt = np.zeros_like(u)
+    dv_dt = np.zeros_like(v)
 
-    # Apply boundary conditions
-    u[0] = u[1]
-    h[0] = h[1]
+    dh_dt[1:-1, 1:-1] = -h[1:-1, 1:-1] * (du_dx[1:-1, 1:-1] + dv_dy[1:-1, 1:-1]) - u[1:-1, 1:-1] * dh_dx[1:-1, 1:-1] - v[1:-1, 1:-1] * dh_dy[1:-1, 1:-1]
+    du_dt[1:-1, 1:-1] = -u[1:-1, 1:-1] * du_dx[1:-1, 1:-1] - v[1:-1, 1:-1] * du_dy[1:-1, 1:-1] - g * dh_dx[1:-1, 1:-1] + viscosity * ((u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1]) / dx**2 + (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2]) / dy**2)
+    dv_dt[1:-1, 1:-1] = -u[1:-1, 1:-1] * dv_dx[1:-1, 1:-1] - v[1:-1, 1:-1] * dv_dy[1:-1, 1:-1] - g * dh_dy[1:-1, 1:-1] + viscosity * ((v[2:, 1:-1] - 2 * v[1:-1, 1:-1] + v[:-2, 1:-1]) / dx**2 + (v[1:-1, 2:] - 2 * v[1:-1, 1:-1] + v[1:-1, :-2]) / dy**2)
 
-    u[-1] = u[-2]
-    h[-1] = h[-2]
+    return np.concatenate((dh_dt.ravel(), du_dt.ravel(), dv_dt.ravel()))
 
-    return np.concatenate((dh_dt, du_dt))
-
-def rungeKutta(y0: np.ndarray, tspan: tuple, delta_t: float, ode: callable):
+def rungeKutta_2D(y0, tspan, delta_t, ode):
     t0, tend = tspan
     t = [t0]
     y = [y0]
 
     # Determine the number of time steps
     num_steps = int((tend - t0) / delta_t)
-    
-    # For animation, store data at each frame
     h_data = []
-    u_data = []
 
     for step in range(num_steps):
+
         k1 = delta_t * ode(t0, y[-1])
         k2 = delta_t * ode(t0 + 0.5 * delta_t, y[-1] + 0.5 * k1)
         k3 = delta_t * ode(t0 + 0.5 * delta_t, y[-1] + 0.5 * k2)
         k4 = delta_t * ode(t0 + delta_t, y[-1] + k3)
 
         y_next = y[-1] + (1.0 / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+
+        # Apply boundary conditions
+        h_next = y_next[: (Nx + 2) * (Ny + 2)].reshape((Nx + 2, Ny + 2))
+        u_next = y_next[(Nx + 2) * (Ny + 2) : 2 * (Nx + 2) * (Ny + 2)].reshape((Nx + 2, Ny + 2))
+        v_next = y_next[2 * (Nx + 2) * (Ny + 2) :].reshape((Nx + 2, Ny + 2))
+
+        # Boundarie Conditions
+        u_next[:, 0] = u_next[:, 1]
+        u_next[:, -1] = u_next[:, -2]
+        v_next[:, 0] = v_next[:, 1]
+        v_next[:, -1] = v_next[:, -2]
+        h_next[:, 0] = h_next[:, 1]
+        h_next[:, -1] = h_next[:, -2]
+        u_next[0, :] = u_next[1, :]
+        u_next[-1, :] = u_next[-2, :]
+        v_next[0, :] = v_next[1, :]
+        v_next[-1, :] = v_next[-2, :]
+        h_next[0, :] = h_next[1, :]
+        h_next[-1, :] = h_next[-2, :]
+
+        # Flatten y_next back into a vector
+        y_next = np.concatenate((h_next.ravel(), u_next.ravel(), v_next.ravel()))
+
         t0 += delta_t
         t.append(t0)
         y.append(y_next)
 
-        # Store data for animation every few steps to reduce data size
-        if step % 40 == 0:
-            h_current = y_next[:N_x + 2]
-            u_current = y_next[N_x + 2:]
-            h_data.append(h_current - h0)
-            u_data.append(u_current)
+        if step % 10 == 0:
+            h_data.append(h_next.copy())
 
-    return t, y, h_data, u_data
+    return t, y, np.array(h_data)
 
-t0 = 0.0
-tf = Total_time
-y0 = np.concatenate((h_initial, u_initial))
+# Solve system
+y0 = np.concatenate((h_initial.ravel(), u_initial.ravel(), v_initial.ravel()))
+t_values, solution_values, h_data = rungeKutta_2D(y0, (0.0, Total_time), delta_t, pde_system_2D)
 
-t, y, h_data, u_data = rungeKutta(y0, (t0, tf), delta_t, pde_system_viscosity)
-h_data = np.array(h_data)
-
-fig, ax = plt.subplots(figsize=(12, 6))
-line, = ax.plot([], [], lw=2)
-ax.set_xlim(0, L)
-ax.set_ylim(-1.5, 1.5)
-ax.set_xlabel('Distance (m)')
-ax.set_ylabel('Surface Elevation (m)')
-ax.set_title('Tsunami Wave Propagation')
-
-def init():
-    line.set_data([], [])
-    return line,
+# Animation
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+x_mesh, y_mesh = np.meshgrid(x_coord / 1000.0, y_coord / 1000.0)
+max_amplitude = np.max(np.abs(h_data - h0))
 
 def animate(i):
-    x_data = x
-    y_data = h_data[i]
-    line.set_data(x_data, y_data)
-    ax.set_title(f'Tsunami Wave at Time = {i * delta_t * 40:.1f} s')
-    return line,
+    ax.clear()
+    data = h_data[i].T - h0
+    surf = ax.plot_surface(x_mesh, y_mesh, data, cmap="Blues", rstride=4, cstride=4, linewidth=0, antialiased=False)
+    ax.set_zlim(-max_amplitude, max_amplitude)
+    ax.set_xlabel('X (km)')
+    ax.set_ylabel('Y (km)')
+    ax.set_zlabel('Surface Elevation (m)')
+    ax.set_title(f"Tsunami Wave at Time = {i * delta_t * 10:.1f} s")
+    return surf,
 
-num_frames = h_data.shape[0]
-ani = animation.FuncAnimation(fig, animate, frames=num_frames, init_func=init, blit=True, interval=50)
-plt.show()
+ani = animation.FuncAnimation(fig, animate, frames=len(h_data), interval=20, blit=True)
+ani.save('tsunami_wave.gif', writer='ffmpeg', fps=30)
