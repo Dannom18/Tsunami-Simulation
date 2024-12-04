@@ -130,7 +130,7 @@ def animate(i):
 
 ani = animation.FuncAnimation(fig, animate, frames=len(h_data), interval=20, blit=True)
 ani.save('tsunami_wave.gif', writer='ffmpeg', fps=30)
-=======
+
 # Domain and parameters
 L = 100e3  # Extended domain length in meters
 Total_time = 3000.0  # Simulation time in seconds
