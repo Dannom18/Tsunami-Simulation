@@ -73,17 +73,6 @@ def pde_system_2D(t, y):
 
     return np.concatenate((dh_dt.ravel(), du_dt.ravel(), dv_dt.ravel()))
 
-
-
-    #dh_dt[1:-1, 1:-1] = -h[1:-1, 1:-1] * (du_dx[1:-1, 1:-1] + dv_dy[1:-1, 1:-1]) - u[1:-1, 1:-1] * dh_dx[1:-1, 1:-1] - v[1:-1, 1:-1] * dh_dy[1:-1, 1:-1]
-    #du_dt[1:-1, 1:-1] = -u[1:-1, 1:-1] * du_dx[1:-1, 1:-1] - v[1:-1, 1:-1] * du_dy[1:-1, 1:-1] - g * (dh_dx[1:-1, 1:-1] + sx[1:-1, 1:-1]*ch)+ viscosity * ((u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1]) / dx**2 + (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2]) / dy**2 - h[1:-1, 1:-1]*ch*g*sx[1:-1, 1:-1])
-    #dv_dt[1:-1, 1:-1] = -u[1:-1, 1:-1] * dv_dx[1:-1, 1:-1] - v[1:-1, 1:-1] * dv_dy[1:-1, 1:-1] - g * (dh_dy[1:-1, 1:-1]+sy[1:-1, 1:-1]*ch) + viscosity * ((v[2:, 1:-1] - 2 * v[1:-1, 1:-1] + v[:-2, 1:-1]) / dx**2 + (v[1:-1, 2:] - 2 * v[1:-1, 1:-1] + v[1:-1, :-2]) / dy**2 - h[1:-1, 1:-1]*ch*g*sy[1:-1, 1:-1])
-
-
-
-
-
-
 def rungeKutta_2D(y0, tspan, delta_t, ode):
     t0, tend = tspan
     t = [t0]
@@ -108,16 +97,16 @@ def rungeKutta_2D(y0, tspan, delta_t, ode):
         v_next = y_next[2 * (Nx + 2) * (Ny + 2) :].reshape((Nx + 2, Ny + 2))
 
         # Boundarie Conditions
-        u_next[:, 0] = u_next[:, 1]
-        u_next[:, -1] = u_next[:, -2]
-        v_next[:, 0] = v_next[:, 1]
-        v_next[:, -1] = v_next[:, -2]
+        u_next[:, 0] = 0
+        u_next[:, -1] = 0
+        v_next[:, 0] = 0
+        v_next[:, -1] = 0
         h_next[:, 0] = h_next[:, 1]
         h_next[:, -1] = h_next[:, -2]
-        u_next[0, :] = u_next[1, :]
-        u_next[-1, :] = u_next[-2, :]
-        v_next[0, :] = v_next[1, :]
-        v_next[-1, :] = v_next[-2, :]
+        u_next[0, :] = 0
+        u_next[-1, :] = 0
+        v_next[0, :] = 0
+        v_next[-1, :] = 0
         h_next[0, :] = h_next[1, :]
         h_next[-1, :] = h_next[-2, :]
 
