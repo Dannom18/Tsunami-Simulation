@@ -22,7 +22,7 @@ cdf_values = norm.cdf(x_dist, loc=mu, scale=sigma)
 coast = cdf_values  # This represents bed elevation (B)
 
 u_left = lambda t: 1
-u_right = lambda t: 10
+u_right = lambda t: 0
 
 # Initial conditions: h is water depth above bed, not absolute water surface
 # Start with a flat 0.5 m layer, then add a perturbation
